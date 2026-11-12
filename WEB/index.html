@@ -1,0 +1,509 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0f1420">
+<title>LF 상황판</title>
+<style>
+  :root {
+    --bg:#0f1420; --panel:#171e2e; --panel2:#1d2639; --line:#2a3550;
+    --fg:#e6ebf5; --mut:#8b97b0; --acc:#22d3ee; --dim:#34405c;
+    --ok:#22c55e; --warn:#f59e0b; --bad:#ef4444;
+  }
+  * { box-sizing:border-box; }
+  html,body { margin:0; background:var(--bg); color:var(--fg);
+    font-family:system-ui,-apple-system,"Noto Sans KR","Malgun Gothic",sans-serif; }
+  body { padding:12px 16px 24px; max-width:1280px; margin:0 auto; }
+  .num { font-variant-numeric:tabular-nums; }
+
+  header { display:flex; flex-wrap:wrap; align-items:center; gap:8px 12px; margin-bottom:12px; }
+  header h1 { font-size:18px; margin:0; flex:1 1 auto; }
+  .chip { font-size:12px; padding:4px 10px; border-radius:999px; border:1px solid var(--line); color:var(--mut); }
+  .chip.on { color:var(--ok); border-color:var(--ok); }
+  .chip.err { color:var(--bad); border-color:var(--bad); }
+
+  button { font:inherit; color:var(--fg); background:var(--panel2); border:1px solid var(--line);
+    border-radius:10px; padding:8px 14px; cursor:pointer; touch-action:manipulation; }
+  button:disabled { opacity:.45; cursor:default; }
+  button.pri { background:var(--acc); color:#05222a; border-color:var(--acc); font-weight:600; }
+
+  .bar { display:flex; flex-wrap:wrap; gap:8px; align-items:stretch; margin-bottom:12px; }
+  #btnRun { min-width:140px; font-size:18px; font-weight:700; padding:12px 18px; }
+  #btnRun.start { background:var(--ok); border-color:var(--ok); color:#052e14; }
+  #btnRun.stop  { background:var(--bad); border-color:var(--bad); color:#fff; }
+  .stateBox { display:flex; flex-direction:column; justify-content:center; padding:4px 14px;
+    background:var(--panel); border:1px solid var(--line); border-radius:10px; min-width:96px; }
+  .stateBox .k, .adj .k { font-size:11px; color:var(--mut); }
+  .stateBox .v { font-size:20px; font-weight:700; }
+  .adj { display:flex; align-items:center; gap:6px; padding:4px 8px; background:var(--panel);
+    border:1px solid var(--line); border-radius:10px; }
+  .adj .v { font-size:18px; min-width:48px; text-align:center; }
+  .adj button { padding:6px 12px; font-size:16px; }
+
+  .grid { display:grid; gap:12px; grid-template-columns:1fr; }
+  @media (min-width:900px) {
+    .grid { grid-template-columns:minmax(340px,5fr) 7fr; }
+    #cardRobot { grid-row:span 2; }
+    #cardLog { grid-column:1 / -1; }
+  }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:12px; min-width:0; }
+  .card h2 { font-size:13px; font-weight:600; color:var(--mut); margin:0 0 8px; }
+
+  #dirText { font-size:26px; font-weight:800; line-height:1.25; }
+  #dirText.ok { color:var(--ok); } #dirText.warn { color:var(--warn); } #dirText.bad { color:var(--bad); }
+  #dirSub { font-size:13px; color:var(--mut); margin:4px 0 8px; }
+
+  #robot { width:100%; max-width:340px; display:block; margin:0 auto; }
+  #robot .arrow { transition:transform .15s linear, opacity .2s; transform-origin:100px 62px; }
+  #robot .arrow line { stroke-width:7; stroke-linecap:round; }
+  #robot .chassis { fill:#22304a; stroke:#3b4d72; stroke-width:2; }
+  #robot .sbar { fill:#0b3a44; stroke:#1b6f80; }
+  #robot .caster { fill:#2b3a58; stroke:#5a6e96; stroke-dasharray:3 2; }
+  #robot .board { fill:#123d2a; stroke:#1f7a4f; }
+  #robot .motor { fill:#55606f; }
+  #robot .wheel { fill:#0b0f17; stroke:#4b5875; stroke-width:1.5; }
+  #robot .tread line { stroke:#3a4560; stroke-width:2.5; }
+  #robot .dot { fill:var(--dim); transition:fill .08s; }
+  #robot .dot.on { fill:var(--acc); }
+  #robot #lineMark { fill:var(--warn); transition:transform .1s linear; }
+  #robot.idle .tread line { stroke:#262e40; }
+
+  .motors { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:8px; }
+  .mot { background:var(--panel2); border:1px solid var(--line); border-radius:10px; padding:8px; }
+  .mot .k { font-size:11px; color:var(--mut); }
+  .mot .v { font-size:22px; font-weight:700; }
+  .mot .d { font-size:12px; color:var(--mut); }
+  .meter { position:relative; height:8px; background:var(--bg); border-radius:4px; margin-top:6px; overflow:hidden; }
+  .meter::after { content:""; position:absolute; left:50%; top:0; bottom:0; width:1px; background:var(--line); }
+  .meter i { position:absolute; top:0; bottom:0; background:var(--ok); }
+  .meter i.rev { background:var(--bad); }
+
+  canvas { width:100%; display:block; }
+  #cvSensor { height:220px; }
+  #cvPos { height:180px; }
+  .legend { font-size:12px; color:var(--mut); margin-top:6px; }
+  .legend b { color:var(--fg); font-weight:600; }
+
+  pre#log { margin:0; height:160px; overflow:auto; font-size:12px; background:var(--panel2);
+    border:1px solid var(--line); border-radius:10px; padding:8px; white-space:pre-wrap; }
+  .note { font-size:12px; color:var(--mut); margin-top:8px; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>라인팔로워 상황판</h1>
+  <span class="chip num" id="chipRate">0 줄/초</span>
+  <span class="chip" id="chipConn">연결 안 됨</span>
+  <button class="pri" id="btnConnect">연결</button>
+  <button id="btnDisconnect" disabled>끊기</button>
+</header>
+
+<div class="bar">
+  <button id="btnRun" class="start" disabled>▶ 시작</button>
+  <div class="stateBox"><span class="k">로봇 상태</span><span class="v" id="vState">-</span></div>
+  <div class="adj">
+    <div><div class="k">속도 SPEED_PCT</div><div class="v num" id="vSpeed">-</div></div>
+    <button data-cmd="-">−</button><button data-cmd="+">+</button>
+  </div>
+  <div class="adj">
+    <div><div class="k">MIN_PWM</div><div class="v num" id="vMin">-</div></div>
+    <button data-cmd="[">−</button><button data-cmd="]">+</button>
+  </div>
+</div>
+
+<div class="grid">
+  <section class="card" id="cardRobot">
+    <h2>주행 방향</h2>
+    <div id="dirText">연결 대기</div>
+    <div id="dirSub" class="num">-</div>
+
+    <svg id="robot" class="idle" viewBox="0 0 200 228" role="img" aria-label="로봇 위에서 본 그림">
+      <defs>
+        <clipPath id="clipL"><rect x="18" y="148" width="26" height="60" rx="6"/></clipPath>
+        <clipPath id="clipR"><rect x="156" y="148" width="26" height="60" rx="6"/></clipPath>
+      </defs>
+      <g id="arrow" class="arrow" style="opacity:0">
+        <line x1="100" y1="60" x2="100" y2="20"/>
+        <path d="M100 4 L87 26 L113 26 Z"/>
+      </g>
+      <path class="chassis" d="M66 84 H134 L152 140 V214 H48 V140 Z"/>
+      <circle class="caster" cx="100" cy="102" r="7"/>
+      <rect class="board" x="72" y="146" width="56" height="52" rx="5"/>
+      <rect class="motor" x="44" y="166" width="22" height="20" rx="3"/>
+      <rect class="motor" x="134" y="166" width="22" height="20" rx="3"/>
+      <rect class="wheel" x="18" y="148" width="26" height="60" rx="6"/>
+      <rect class="wheel" x="156" y="148" width="26" height="60" rx="6"/>
+      <g clip-path="url(#clipL)"><g id="treadL" class="tread"></g></g>
+      <g clip-path="url(#clipR)"><g id="treadR" class="tread"></g></g>
+      <rect class="sbar" x="44" y="64" width="112" height="20" rx="4"/>
+      <g id="dots"></g>
+      <path id="lineMark" d="M0 0 L-6 10 L6 10 Z" style="opacity:0"/>
+    </svg>
+
+    <div class="motors">
+      <div class="mot">
+        <div class="k">왼쪽 모터</div>
+        <div class="v num" id="vML">-</div>
+        <div class="d num" id="dML">-</div>
+        <div class="meter"><i id="mML"></i></div>
+      </div>
+      <div class="mot">
+        <div class="k">오른쪽 모터</div>
+        <div class="v num" id="vMR">-</div>
+        <div class="d num" id="dMR">-</div>
+        <div class="meter"><i id="mMR"></i></div>
+      </div>
+    </div>
+    <div class="note">모터 값은 PWM 지령(−255~+255)입니다. 정지 중에는 "주행했다면 넣었을 값"을 보여 주고, 바퀴 애니메이션은 주행(RUN) 중에만 움직입니다.</div>
+  </section>
+
+  <section class="card" id="cardSensor">
+    <h2>센서 RAW (QTR-8RC 방전 시간, µs)</h2>
+    <canvas id="cvSensor"></canvas>
+    <div class="legend">막대 색: <b style="color:var(--acc)">검정 판정</b> / 흰색 판정 · 점선 = 임계값 <b class="num" id="vThr">-</b> µs · 왼쪽부터 1~8</div>
+  </section>
+
+  <section class="card" id="cardPos">
+    <h2>위치 POS 추이 (최근 15초)</h2>
+    <canvas id="cvPos"></canvas>
+    <div class="legend">0 = 중앙, 음수 = 라인이 왼쪽 · 빨간 점 = 이탈(lost) · 주황 점 = 교차/겹침</div>
+  </section>
+
+  <section class="card" id="cardLog">
+    <h2>이벤트 로그</h2>
+    <pre id="log"></pre>
+  </section>
+</div>
+
+<script>
+'use strict';
+// ───────── BLE (Nordic UART Service) ─────────
+const NUS = '6e400001-b5a3-f393-e0a9-e50e24dcca9e';
+const RX  = '6e400002-b5a3-f393-e0a9-e50e24dcca9e';   // 브라우저 → 로봇
+const TX  = '6e400003-b5a3-f393-e0a9-e50e24dcca9e';   // 로봇 → 브라우저
+
+const NUM = 8, TIMEOUT = 2500, LOST_POS = 4000, W_OFFSET = 3500;
+const $ = id => document.getElementById(id);
+const dec = new TextDecoder(), enc = new TextEncoder();
+
+let device = null, rxChar = null, buf = '', lineCount = 0, lastDataAt = 0;
+
+// 최신 상태 (펌웨어 D 줄: D,ms,st,bits,pos,idx,ml,mr,cross,r0..r7)
+const S = { st:null, bits:0, pos:0, idx:0, ml:0, mr:0, cross:false,
+            raw:new Array(NUM).fill(0), thr:1000, speed:null, minPwm:null };
+const hist = [];   // { t, pos, idx, cross }
+const HIST_MS = 15000;
+
+// ───────── 로그 ─────────
+function log(t) {
+  const p = $('log');
+  const now = new Date().toTimeString().slice(0, 8);
+  p.textContent += `[${now}] ${t}\n`;
+  if (p.textContent.length > 20000) p.textContent = p.textContent.slice(-15000);
+  p.scrollTop = p.scrollHeight;
+}
+
+// ───────── 수신 줄 처리 ─────────
+function handleLine(l) {
+  const f = l.split(',');
+  if (f[0] === 'D' && f.length >= 9 + NUM) {
+    lineCount++;
+    lastDataAt = performance.now();
+    S.st    = f[2];
+    S.bits  = parseInt(f[3], 16) || 0;
+    S.pos   = parseInt(f[4], 10) || 0;
+    S.idx   = parseInt(f[5], 10) || 0;
+    S.ml    = parseInt(f[6], 10) || 0;
+    S.mr    = parseInt(f[7], 10) || 0;
+    S.cross = f[8] === '1';
+    for (let i = 0; i < NUM; i++) S.raw[i] = parseInt(f[9 + i], 10) || 0;
+    hist.push({ t: lastDataAt, pos: S.pos, idx: S.idx, cross: S.cross });
+    while (hist.length && lastDataAt - hist[0].t > HIST_MS) hist.shift();
+    render();
+  } else if (f[0] === 'S' && f.length >= 4) {
+    S.speed = +f[1]; S.minPwm = +f[2]; S.thr = +f[3] || 1000;
+    $('vSpeed').textContent = S.speed + '%';
+    $('vMin').textContent = S.minPwm;
+    $('vThr').textContent = S.thr;
+    drawSensors();
+  } else if (f[0] === 'E') {
+    const ev = f.slice(1).join(',');
+    if (ev === 'START') S.st = 'W';          // 버튼으로 눌러도 즉시 반영
+    if (ev === 'STOP')  S.st = 'S';
+    log('로봇: ' + ev);
+    render();
+  } else if (l.length) {
+    log(l);
+  }
+}
+
+// ───────── 방향 판단 (글자) ─────────
+function direction() {
+  const side = S.pos < 0 ? '왼쪽' : '오른쪽';
+  if (S.ml === 0 && S.mr === 0) return { txt:'■ 정지', cls:'' };
+  if (S.idx >= 8)  return { txt: S.pos < 0 ? '↺ 라인 이탈 · 왼쪽으로 찾는 중' : '↻ 라인 이탈 · 오른쪽으로 찾는 중', cls:'bad' };
+  if (S.cross)     return { txt:'✚ 교차/겹침 · 하던 방향 유지', cls:'warn' };
+  if (S.idx === 0) return { txt:'↑ 직진', cls:'ok' };
+  const turn = S.pos < 0 ? '좌회전' : '우회전';
+  const arrow = S.pos < 0 ? '↖' : '↗';
+  const level = S.idx <= 2 ? '약하게' : S.idx <= 5 ? '보통' : '강하게(안쪽 바퀴 역회전)';
+  return { txt:`${arrow} ${turn} · ${level}`, cls: S.idx <= 5 ? 'ok' : 'warn', side };
+}
+
+const stateName = { S:'STOP', W:'WAIT', R:'RUN' };
+
+function setMotorCard(id, v) {
+  const pct = Math.round(Math.abs(v) / 255 * 100);
+  $('v' + id).textContent = (v > 0 ? '+' : '') + v;
+  $('d' + id).textContent = v === 0 ? '정지' : `${pct}% · ${v > 0 ? '전진' : '역회전'}`;
+  const m = $('m' + id), w = Math.min(50, Math.abs(v) / 255 * 50);
+  m.style.width = w + '%';
+  m.style.left = v >= 0 ? '50%' : (50 - w) + '%';
+  m.className = v < 0 ? 'rev' : '';
+}
+
+// ───────── 화면 갱신 ─────────
+function render() {
+  const run = S.st === 'R';
+  $('vState').textContent = stateName[S.st] || '-';
+  $('vState').style.color = run ? 'var(--ok)' : S.st === 'W' ? 'var(--warn)' : 'var(--fg)';
+
+  const b = $('btnRun');
+  b.disabled = !rxChar || b.dataset.busy === '1';
+  if (S.st === 'R' || S.st === 'W') { b.textContent = '■ 정지'; b.className = 'stop'; }
+  else                              { b.textContent = '▶ 시작'; b.className = 'start'; }
+
+  const d = direction();
+  $('dirText').textContent = (run ? '' : (S.st === 'W' ? '출발 대기 · ' : '정지 중 · 예상: ')) + d.txt;
+  $('dirText').className = run ? d.cls : '';
+  $('dirSub').textContent = `POS ${S.pos > 0 ? '+' : ''}${S.pos} · 레벨 ${S.idx >= 8 ? 'lost' : 'lv' + S.idx} · 센서 ${bitsStr(S.bits)}`;
+
+  setMotorCard('ML', S.ml);
+  setMotorCard('MR', S.mr);
+
+  // 센서 점, 라인 위치 표시
+  dotEls.forEach((el, i) => el.classList.toggle('on', !!(S.bits & (1 << i))));
+  const mk = $('lineMark');
+  if (S.bits && S.idx < 8) {
+    const x = 100 + S.pos / W_OFFSET * (14 * 3.5);
+    mk.setAttribute('transform', `translate(${x} 86)`);
+    mk.style.opacity = 1;
+  } else mk.style.opacity = 0;
+
+  // 화살표 각도: 좌우 바퀴 차이로 회전 방향 표시 (+ = 오른쪽)
+  const ar = $('arrow');
+  const sum = Math.abs(S.ml) + Math.abs(S.mr);
+  if (sum === 0) ar.style.opacity = 0;
+  else {
+    const ang = (S.ml - S.mr) / sum * 90;
+    ar.style.transform = `rotate(${ang.toFixed(1)}deg)`;
+    ar.style.opacity = run ? 1 : 0.35;
+    ar.style.fill = ar.style.stroke = run ? cssVar(d.cls ? '--' + d.cls : '--acc') : cssVar('--mut');
+  }
+  $('robot').classList.toggle('idle', !run);
+
+  drawSensors();
+  drawPos();
+}
+
+function bitsStr(b) { let s = ''; for (let i = 0; i < NUM; i++) s += (b & (1 << i)) ? '1' : '0'; return s; }
+function cssVar(n) { return getComputedStyle(document.documentElement).getPropertyValue(n).trim() || '#22d3ee'; }
+
+// ───────── SVG 준비 ─────────
+const svgNS = 'http://www.w3.org/2000/svg';
+const dotEls = [];
+for (let i = 0; i < NUM; i++) {
+  const c = document.createElementNS(svgNS, 'circle');
+  c.setAttribute('cx', 44 + 14 * (i + 0.5));
+  c.setAttribute('cy', 74); c.setAttribute('r', 5);
+  c.setAttribute('class', 'dot');
+  $('dots').appendChild(c); dotEls.push(c);
+}
+function makeTread(id, x0) {
+  const g = $(id);
+  for (let y = 136; y <= 224; y += 8) {
+    const ln = document.createElementNS(svgNS, 'line');
+    ln.setAttribute('x1', x0); ln.setAttribute('x2', x0 + 26);
+    ln.setAttribute('y1', y);  ln.setAttribute('y2', y);
+    g.appendChild(ln);
+  }
+}
+makeTread('treadL', 18); makeTread('treadR', 156);
+
+// 바퀴 무늬 애니메이션: 위에서 볼 때 전진이면 무늬가 앞(위)으로 이동
+let offL = 0, offR = 0, lastT = performance.now();
+function animate(t) {
+  const dt = Math.min(0.1, (t - lastT) / 1000); lastT = t;
+  if (S.st === 'R') {
+    const k = 80 / 255;                       // PWM 255 → 초당 80 단위 이동 (표시용)
+    offL = ((offL - S.ml * k * dt) % 8 + 8) % 8;
+    offR = ((offR - S.mr * k * dt) % 8 + 8) % 8;
+    $('treadL').setAttribute('transform', `translate(0 ${offL.toFixed(2)})`);
+    $('treadR').setAttribute('transform', `translate(0 ${offR.toFixed(2)})`);
+  }
+  requestAnimationFrame(animate);
+}
+requestAnimationFrame(animate);
+
+// ───────── 캔버스 ─────────
+function fit(c) {
+  const r = c.getBoundingClientRect(), d = window.devicePixelRatio || 1;
+  const w = Math.round(r.width * d), h = Math.round(r.height * d);
+  if (c.width !== w || c.height !== h) { c.width = w; c.height = h; }
+  const ctx = c.getContext('2d');
+  ctx.setTransform(d, 0, 0, d, 0, 0);
+  ctx.clearRect(0, 0, r.width, r.height);
+  return [ctx, r.width, r.height];
+}
+
+function drawSensors() {
+  const [ctx, W, H] = fit($('cvSensor'));
+  const padL = 8, padB = 34, padT = 16, gap = 6;
+  const bw = (W - padL * 2 - gap * (NUM - 1)) / NUM;
+  const ph = H - padB - padT;
+  const acc = cssVar('--acc'), dim = cssVar('--dim'), mut = cssVar('--mut'), fg = cssVar('--fg');
+
+  ctx.font = '12px system-ui, sans-serif';
+  ctx.textAlign = 'center';
+  for (let i = 0; i < NUM; i++) {
+    const x = padL + i * (bw + gap);
+    const v = Math.min(TIMEOUT, S.raw[i]);
+    const h = v / TIMEOUT * ph;
+    ctx.fillStyle = cssVar('--panel2');
+    ctx.fillRect(x, padT, bw, ph);
+    ctx.fillStyle = (S.bits & (1 << i)) ? acc : dim;
+    ctx.fillRect(x, padT + ph - h, bw, h);
+    ctx.fillStyle = fg;
+    ctx.fillText(String(S.raw[i]), x + bw / 2, H - padB + 15);
+    ctx.fillStyle = mut;
+    ctx.fillText(String(i + 1), x + bw / 2, H - 4);
+  }
+  // 임계값 선
+  const ty = padT + ph - Math.min(TIMEOUT, S.thr) / TIMEOUT * ph;
+  ctx.strokeStyle = cssVar('--warn'); ctx.setLineDash([6, 4]); ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.moveTo(padL, ty); ctx.lineTo(W - padL, ty); ctx.stroke();
+  ctx.setLineDash([]);
+}
+
+function drawPos() {
+  const [ctx, W, H] = fit($('cvPos'));
+  const padL = 44, padR = 8, padT = 8, padB = 18;
+  const pw = W - padL - padR, ph = H - padT - padB;
+  const yOf = p => padT + (1 - (p + LOST_POS) / (LOST_POS * 2)) * ph;
+  const now = performance.now();
+  const xOf = t => padL + (1 - (now - t) / HIST_MS) * pw;
+  const mut = cssVar('--mut'), line = cssVar('--line');
+
+  ctx.font = '11px system-ui, sans-serif'; ctx.textAlign = 'right'; ctx.lineWidth = 1;
+  [-3500, 0, 3500].forEach(p => {
+    const y = yOf(p);
+    ctx.strokeStyle = p === 0 ? mut : line;
+    ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(W - padR, y); ctx.stroke();
+    ctx.fillStyle = mut; ctx.fillText((p > 0 ? '+' : '') + p, padL - 6, y + 4);
+  });
+  ctx.textAlign = 'left'; ctx.fillText('← 왼쪽', 2, padT + 10); ctx.fillText('→ 오른쪽', 2, H - 4);
+
+  if (hist.length < 2) return;
+  ctx.strokeStyle = cssVar('--acc'); ctx.lineWidth = 2; ctx.beginPath();
+  hist.forEach((h, i) => {
+    const x = xOf(h.t), y = yOf(Math.max(-LOST_POS, Math.min(LOST_POS, h.pos)));
+    i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+  });
+  ctx.stroke();
+  hist.forEach(h => {
+    if (h.idx >= 8 || h.cross) {
+      ctx.fillStyle = h.idx >= 8 ? cssVar('--bad') : cssVar('--warn');
+      ctx.beginPath(); ctx.arc(xOf(h.t), yOf(Math.max(-LOST_POS, Math.min(LOST_POS, h.pos))), 3, 0, Math.PI * 2); ctx.fill();
+    }
+  });
+}
+window.addEventListener('resize', () => { drawSensors(); drawPos(); });
+
+// ───────── 연결 ─────────
+function setConn(txt, cls) { const c = $('chipConn'); c.textContent = txt; c.className = 'chip ' + (cls || ''); }
+
+async function connectGatt() {
+  setConn('연결 중...');
+  const server = await device.gatt.connect();
+  const svc = await server.getPrimaryService(NUS);
+  const tx = await svc.getCharacteristic(TX);
+  rxChar = await svc.getCharacteristic(RX);
+  await tx.startNotifications();
+  tx.addEventListener('characteristicvaluechanged', e => {
+    buf += dec.decode(e.target.value);
+    let i;
+    while ((i = buf.indexOf('\n')) >= 0) {
+      const l = buf.slice(0, i).trim();
+      buf = buf.slice(i + 1);
+      if (l) handleLine(l);
+    }
+    if (buf.length > 512) buf = '';            // 줄바꿈이 깨졌을 때 보호
+  });
+  setConn('연결됨: ' + (device.name || '로봇'), 'on');
+  $('btnConnect').textContent = '연결';
+  $('btnDisconnect').disabled = false;
+  log('연결됨');
+  send('s');
+  render();
+}
+
+$('btnConnect').onclick = async () => {
+  if (!navigator.bluetooth) {
+    setConn('이 브라우저는 Web Bluetooth 미지원 (Chrome/Edge 사용)', 'err'); return;
+  }
+  try {
+    if (!device) {
+      device = await navigator.bluetooth.requestDevice({ filters: [{ services: [NUS] }] });
+      device.addEventListener('gattserverdisconnected', () => {
+        rxChar = null; buf = '';
+        setConn('연결 끊김', 'err');
+        $('btnConnect').textContent = '다시 연결';
+        $('btnDisconnect').disabled = true;
+        log('연결 끊김');
+        render();
+      });
+    }
+    await connectGatt();
+  } catch (err) {
+    setConn('오류: ' + err.message, 'err');
+    if (err.name === 'NotFoundError') device = null;   // 선택 창에서 취소
+  }
+};
+
+$('btnDisconnect').onclick = () => { if (device && device.gatt.connected) device.gatt.disconnect(); };
+
+async function send(c) {
+  if (!rxChar) return;
+  try { await rxChar.writeValueWithoutResponse(enc.encode(c)); }
+  catch (err) { log('전송 오류: ' + err.message); }
+}
+
+// 시작/정지: 로봇의 g(토글) 명령. 상태 표시는 로봇이 보내는 값으로만 바뀜 → 버튼과 스위치가 항상 일치
+$('btnRun').onclick = () => {
+  const b = $('btnRun');
+  b.dataset.busy = '1'; b.disabled = true;
+  send('g');
+  setTimeout(() => { b.dataset.busy = '0'; render(); }, 400);   // 연타로 두 번 토글되는 것 방지
+};
+document.querySelectorAll('button[data-cmd]').forEach(b => b.onclick = () => send(b.dataset.cmd));
+
+// 수신률, 데이터 끊김 표시
+setInterval(() => {
+  const c = $('chipRate');
+  c.textContent = lineCount + ' 줄/초';
+  c.className = 'chip num ' + (rxChar ? (lineCount >= 5 ? 'on' : 'err') : '');
+  lineCount = 0;
+  drawPos();
+}, 1000);
+
+// 오프라인 사용: https(GitHub Pages)에서 한 번 열면 이후 인터넷 없이도 열림
+if ('serviceWorker' in navigator && location.protocol === 'https:') {
+  navigator.serviceWorker.register('sw.js').catch(() => {});
+}
+
+render();
+</script>
+</body>
+</html>
