@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#0f1420">
-<title>LF 상황판</title>
+<title>LF 상황판 · CSV v6</title>
 <style>
   :root {
     --bg:#0f1420; --panel:#171e2e; --panel2:#1d2639; --line:#2a3550;
@@ -22,6 +22,8 @@
   .chip { font-size:12px; padding:4px 10px; border-radius:999px; border:1px solid var(--line); color:var(--mut); }
   .chip.on { color:var(--ok); border-color:var(--ok); }
   .chip.err { color:var(--bad); border-color:var(--bad); }
+  .chip.warn { color:var(--warn); border-color:var(--warn); }
+  .chip.small { font-size:11px; padding:3px 8px; white-space:nowrap; }
 
   button { font:inherit; color:var(--fg); background:var(--panel2); border:1px solid var(--line);
     border-radius:10px; padding:8px 14px; cursor:pointer; touch-action:manipulation; }
@@ -74,6 +76,17 @@
   .mot .k { font-size:11px; color:var(--mut); }
   .mot .v { font-size:22px; font-weight:700; }
   .mot .d { font-size:12px; color:var(--mut); }
+  .rpm { margin-top:8px; padding-top:6px; border-top:1px solid var(--line); }
+  .rpm .k { font-size:11px; color:var(--mut); }
+  .rpm .v { font-size:20px; font-weight:700; }
+  .rpm .unit { font-size:11px; color:var(--mut); font-weight:400; }
+  .rpm .hint { font-size:11px; color:var(--mut); }
+  .rpmConfig { margin-top:10px; padding:10px 12px; border:1px solid var(--line); border-radius:10px; }
+  .rpmConfig summary { cursor:pointer; font-size:12px; color:var(--mut); }
+  .rpmConfig .fields { display:flex; flex-wrap:wrap; gap:10px; margin-top:10px; }
+  .rpmConfig label { display:flex; flex-direction:column; gap:4px; font-size:11px; color:var(--mut); flex:1 1 155px; }
+  .rpmConfig input { min-width:0; width:100%; background:var(--panel2); color:var(--fg); border:1px solid var(--line); border-radius:8px; padding:7px 9px; font:inherit; font-size:13px; }
+  .rpmConfig .help { font-size:11px; color:var(--mut); margin-top:6px; line-height:1.5; }
   .meter { position:relative; height:8px; background:var(--bg); border-radius:4px; margin-top:6px; overflow:hidden; }
   .meter::after { content:""; position:absolute; left:50%; top:0; bottom:0; width:1px; background:var(--line); }
   .meter i { position:absolute; top:0; bottom:0; background:var(--ok); }
@@ -85,6 +98,23 @@
   .legend { font-size:12px; color:var(--mut); margin-top:6px; }
   .legend b { color:var(--fg); font-weight:600; }
 
+  .csvBar { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between;
+    gap:10px 16px; background:var(--panel); border:1px solid var(--line);
+    border-radius:12px; padding:10px 14px; margin-bottom:12px; }
+  .csvBar .csvHeading { display:flex; flex-direction:column; gap:2px; }
+  .csvBar h2 { font-size:14px; font-weight:700; margin:0; }
+  .csvBar .csvHint { font-size:11px; color:var(--mut); }
+  .csvBar .csvRight { display:flex; flex-wrap:wrap; align-items:center; gap:8px 12px; }
+  .csvBar #csvInfo { font-size:12px; color:var(--mut); white-space:nowrap; }
+  .csvBar button { font-weight:600; }
+  @media (max-width:580px) {
+    .csvBar .csvRight { width:100%; }
+    .csvBar .csvTools { width:100%; }
+    .csvBar .csvTools button { flex:1 1 auto; }
+  }
+  .csvTools { display:flex; flex-wrap:wrap; gap:6px; }
+  .csvTools button { padding:6px 10px; font-size:12px; }
+  .csvTools button.rec { border-color:var(--bad); color:var(--bad); }
   pre#log { margin:0; height:160px; overflow:auto; font-size:12px; background:var(--panel2);
     border:1px solid var(--line); border-radius:10px; padding:8px; white-space:pre-wrap; }
   .note { font-size:12px; color:var(--mut); margin-top:8px; }
@@ -93,8 +123,9 @@
 <body>
 
 <header>
-  <h1>라인팔로워 상황판</h1>
+  <h1>라인팔로워 상황판 <span style="font-size:10px;color:var(--mut);font-weight:400;white-space:nowrap">CSV v6</span></h1>
   <span class="chip num" id="chipRate">0 줄/초</span>
+  <span class="chip small num" id="chipClients" title="전체 BLE 연결 수는 로봇 펌웨어가 C,개수 형식으로 알려줘야 정확히 표시됩니다.">동시 연결 —</span>
   <span class="chip" id="chipConn">연결 안 됨</span>
   <button class="pri" id="btnConnect">연결</button>
   <button id="btnDisconnect" disabled>끊기</button>
@@ -112,6 +143,21 @@
     <button data-cmd="[">−</button><button data-cmd="]">+</button>
   </div>
 </div>
+
+<section class="csvBar" aria-label="CSV 데이터 기록 도구">
+  <div class="csvHeading">
+    <h2><span aria-hidden="true">⦿</span> 데이터 기록 · CSV</h2>
+    <div class="csvHint">수신한 센서 RAW·모터 PWM·POS 저장 · CSV 저장은 기록 후 활성화</div>
+  </div>
+  <div class="csvRight">
+    <div class="csvTools">
+      <button id="btnRecord" type="button">● CSV 기록 시작</button>
+      <button id="btnCsvSave" type="button" disabled>CSV 저장 ↓</button>
+      <button id="btnCsvClear" type="button" disabled>기록 삭제</button>
+    </div>
+    <span class="num" id="csvInfo" role="status">기록 대기 · 0개 샘플</span>
+  </div>
+</section>
 
 <div class="grid">
   <section class="card" id="cardRobot">
@@ -148,14 +194,30 @@
         <div class="v num" id="vML">-</div>
         <div class="d num" id="dML">-</div>
         <div class="meter"><i id="mML"></i></div>
+        <div class="rpm"><div class="k">실측 바퀴 회전수</div><div class="v num"><span id="rpmL">—</span> <span class="unit">RPM</span></div></div>
       </div>
       <div class="mot">
         <div class="k">오른쪽 모터</div>
         <div class="v num" id="vMR">-</div>
         <div class="d num" id="dMR">-</div>
         <div class="meter"><i id="mMR"></i></div>
+        <div class="rpm"><div class="k">실측 바퀴 회전수</div><div class="v num"><span id="rpmR">—</span> <span class="unit">RPM</span></div></div>
       </div>
     </div>
+    <details class="rpmConfig">
+      <summary>RPM 계산 설정 (엔코더 분해능 · 기어비)</summary>
+      <div class="fields">
+        <label>모터축 1회전당 엔코더 카운트 (CPR)
+          <input id="encCpr" type="number" inputmode="decimal" min="0.0001" step="any" value="28" autocomplete="off">
+        </label>
+        <label>감속비 (모터축 회전수 ÷ 바퀴 회전수)
+          <input id="gearRatio" type="number" inputmode="decimal" min="0.0001" step="any" value="10" autocomplete="off">
+        </label>
+      </div>
+      <div class="help">초기값: 7 PPR(미확인 가정) × 4배수(x4) 계수 = 모터축 28 CPR, 감속비 10:1. 펌웨어의 엔코더 카운팅 방식이 x4일 때 유효합니다. 실제 분해능이 확인되면 수정해 주세요. 설정은 브라우저에 저장됩니다.</div>
+      <div class="help num" id="wheelCountsPerRev">바퀴 1회전당 280카운트 (설정값 기준)</div>
+    </details>
+    <div class="note" id="rpmStatus">RPM: 엔코더 데이터 수신 대기</div>
     <div class="note">모터 값은 PWM 지령(−255~+255)입니다. 정지 중에는 "주행했다면 넣었을 값"을 보여 주고, 바퀴 애니메이션은 주행(RUN) 중에만 움직입니다.</div>
   </section>
 
@@ -168,12 +230,13 @@
   <section class="card" id="cardPos">
     <h2>위치 POS 추이 (최근 15초)</h2>
     <canvas id="cvPos"></canvas>
-    <div class="legend">0 = 중앙, 음수 = 라인이 왼쪽 · 빨간 점 = 이탈(lost) · 주황 점 = 교차/겹침</div>
+    <div class="legend">POS 0 = 중앙 · 음수 = 왼쪽 · 양수 = 오른쪽 · 빨간 점 = 이탈(lost) · 주황 점 = 교차/겹침</div>
   </section>
 
   <section class="card" id="cardLog">
     <h2>이벤트 로그</h2>
     <pre id="log"></pre>
+    <div class="note">CSV에는 BLE로 수신한 센서 RAW 8채널, POS, 좌·우 모터 PWM 지령, 상태, 설정값 등을 기록합니다. 엔코더 누적값이 수신되면 RPM도 포함됩니다. 기록은 이 브라우저의 메모리에 저장되므로 페이지를 닫기 전에 CSV로 저장해 주세요. BLE가 끊겨도 기존 기록은 유지되며, 연결되지 않은 구간의 데이터는 저장되지 않습니다.</div>
   </section>
 </div>
 
@@ -190,11 +253,120 @@ const dec = new TextDecoder(), enc = new TextEncoder();
 
 let device = null, rxChar = null, buf = '', lineCount = 0, lastDataAt = 0;
 
-// 최신 상태 (펌웨어 D 줄: D,ms,st,bits,pos,idx,ml,mr,cross,r0..r7)
+// 기존 D 메시지는 그대로 사용. 펌웨어가 마지막에 누적 카운트 2개를 붙이면 RPM을 계산합니다.
+// D,ms,st,bits,pos,idx,ml,mr,cross,r0..r7,countL,countR (총 19필드)
+// countL/countR: 부호 있는 누적 카운트 (좌/우), ms: ESP32 millis()
 const S = { st:null, bits:0, pos:0, idx:0, ml:0, mr:0, cross:false,
             raw:new Array(NUM).fill(0), thr:1000, speed:null, minPwm:null };
 const hist = [];   // { t, pos, idx, cross }
-const HIST_MS = 15000;
+const HIST_MS = 15000, STALE_MS = 2500;
+let connectedClients = null; // 펌웨어가 보내는 C,<동시 접속 수> (미수신이면 알 수 없음)
+// 전제: 각 채널 7 PPR, A/B 양 에지(x4) 계수 시 모터축 28 CPR.
+// 다른 방식으로 계수하면 펌웨어의 실제 counts/rev에 맞게 HTML 설정을 변경해야 합니다.
+const DEFAULT_ENCODER_CPR = 7 * 4;
+const DEFAULT_GEAR_RATIO = 10;
+const RPM_WINDOW_MS = 350;
+let rpmLeft = null, rpmRight = null;
+let lastEncoderRxAt = 0, encoderSampleSeen = false;
+let encoderBase = null;  // { ms, countL, countR }
+let encoderCpr = null, gearRatio = null;
+
+function readPositiveNumber(s) {
+  if (s.trim() === '') return null;
+  const n = Number(s);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+function loadRpmSettings() {
+  try {
+    $('encCpr').value = localStorage.getItem('lf.encoderCpr') || String(DEFAULT_ENCODER_CPR);
+    $('gearRatio').value = localStorage.getItem('lf.gearRatio') || String(DEFAULT_GEAR_RATIO);
+  } catch (_) { /* 저장소가 차단되어도 RPM 계산은 작동합니다. */ }
+  updateRpmSettings();
+}
+function updateRpmSettings() {
+  encoderCpr = readPositiveNumber($('encCpr').value);
+  gearRatio = readPositiveNumber($('gearRatio').value);
+  $('wheelCountsPerRev').textContent = encoderCpr !== null && gearRatio !== null
+    ? `바퀴 1회전당 ${Number((encoderCpr * gearRatio).toFixed(4)).toLocaleString('ko-KR')}카운트 (설정값 기준)`
+    : '바퀴 1회전당 카운트: 설정 필요';
+  rpmLeft = rpmRight = null;
+  encoderBase = null; // 바뀐 비율로 이전 구간을 재계산하지 않습니다.
+  for (const [id, v] of [['lf.encoderCpr', $('encCpr').value], ['lf.gearRatio', $('gearRatio').value]]) {
+    try { if (v) localStorage.setItem(id, v); else localStorage.removeItem(id); } catch (_) {}
+  }
+  updateRpmDisplay();
+}
+function updateRpmDisplay() {
+  const configured = encoderCpr !== null && gearRatio !== null;
+  const fresh = !!rxChar && lastEncoderRxAt > 0 && performance.now() - lastEncoderRxAt <= STALE_MS;
+  $('rpmL').textContent = configured && fresh && rpmLeft !== null ? rpmLeft.toFixed(1) : '—';
+  $('rpmR').textContent = configured && fresh && rpmRight !== null ? rpmRight.toFixed(1) : '—';
+  $('rpmStatus').textContent = !configured
+    ? 'RPM: 엔코더 CPR과 감속비를 설정해 주세요. (실측값을 추정하지 않습니다.)'
+    : !rxChar ? 'RPM: BLE 연결 대기'
+    : !encoderSampleSeen ? 'RPM: 펌웨어의 엔코더 누적 카운트 전송 대기'
+    : !fresh ? 'RPM: 엔코더 데이터 수신 지연'
+    : rpmLeft === null ? 'RPM: 측정 구간 수집 중 (약 0.35초)' : 'RPM: 엔코더 누적 카운트 기반 계산값';
+}
+function updateEncoderFromData(f) {
+  if (f.length < 19) return; // 기존 펌웨어 D 메시지와 호환
+  const ms = Number(f[1]), countL = Number(f[17]), countR = Number(f[18]);
+  if (![ms, countL, countR].every(Number.isSafeInteger) || ms < 0 || ms > 0xFFFFFFFF) return;
+  encoderSampleSeen = true;
+  lastEncoderRxAt = performance.now();
+  if (!encoderBase) { encoderBase = {ms, countL, countR}; return; }
+  // ESP32 millis()와 int32 누적 카운트의 래핑(overflow) 처리.
+  const dt = (ms - encoderBase.ms) >>> 0;
+  if (dt === 0) return;
+  if (dt > STALE_MS) { encoderBase = {ms, countL, countR}; rpmLeft = rpmRight = null; return; }
+  if (dt < RPM_WINDOW_MS) return;
+  const deltaL = (countL - encoderBase.countL) | 0;
+  const deltaR = (countR - encoderBase.countR) | 0;
+  if (encoderCpr !== null && gearRatio !== null) {
+    const wheelCountsPerRev = encoderCpr * gearRatio;
+    rpmLeft = (deltaL * 60000) / (wheelCountsPerRev * dt);
+    rpmRight = (deltaR * 60000) / (wheelCountsPerRev * dt);
+  }
+  encoderBase = {ms, countL, countR};
+}
+let renderPending = false;
+function scheduleRender() {
+  if (renderPending) return;
+  renderPending = true;
+  requestAnimationFrame(() => { renderPending = false; render(); });
+}
+function telemetryFresh() { return !!rxChar && lastDataAt > 0 && performance.now() - lastDataAt <= STALE_MS; }
+function updateClientCount() {
+  const c = $('chipClients');
+  const localConnected = !!(rxChar && device && device.gatt && device.gatt.connected);
+  if (localConnected && Number.isInteger(connectedClients)) {
+    c.textContent = `동시 연결 ${connectedClients}대`;
+    c.title = '로봇 펌웨어가 보고한 BLE 동시 연결 기기 수';
+    c.className = 'chip small num on';
+  } else if (localConnected) {
+    c.textContent = '동시 연결 ≥1대';
+    c.title = '이 화면의 연결 1대만 확인됨. 전체 기기 수를 알려면 로봇 펌웨어에서 C,개수를 전송해야 합니다.';
+    c.className = 'chip small num';
+  } else {
+    c.textContent = '동시 연결 —';
+    c.title = '로봇에 연결되지 않아 전체 BLE 연결 기기 수를 확인할 수 없습니다.';
+    c.className = 'chip small num';
+  }
+}
+function clearTelemetry() {
+  lastDataAt = 0; lineCount = 0; connectedClients = null; buf = '';
+  rpmLeft = rpmRight = null; encoderSampleSeen = false; lastEncoderRxAt = 0; encoderBase = null;
+  S.st = null; S.bits = 0; S.pos = 0; S.idx = 0; S.ml = 0; S.mr = 0; S.cross = false;
+  S.raw.fill(0); S.thr = 1000; S.speed = null; S.minPwm = null;
+  hist.length = 0;
+  $('vSpeed').textContent = '-';
+  $('vMin').textContent = '-';
+  $('vThr').textContent = '-';
+  updateClientCount();
+  updateRpmDisplay();
+  updateCsvUi(); // 연결 해제되어도 CSV 누적 데이터 자체는 지우지 않습니다.
+  scheduleRender();
+}
 
 // ───────── 로그 ─────────
 function log(t) {
@@ -204,6 +376,93 @@ function log(t) {
   if (p.textContent.length > 20000) p.textContent = p.textContent.slice(-15000);
   p.scrollTop = p.scrollHeight;
 }
+
+// ───────── CSV 데이터 기록 (이 브라우저에서 수신한 D 줄만 기록) ─────────
+// 헤더 명칭에 단위를 적고, 실제 미수신 값(특히 엔코더/RPM)은 빈 칸으로 둡니다.
+const CSV_COLUMNS = [
+  'received_at_utc', 'esp_ms', 'state', 'sensor_bits_hex', 'pos', 'level',
+  'motor_left_pwm_cmd', 'motor_right_pwm_cmd', 'cross',
+  ...Array.from({length: NUM}, (_, i) => `sensor_raw_${i + 1}_us`),
+  'speed_pct', 'min_pwm', 'threshold_us', 'ble_connected_clients',
+  'encoder_left_count', 'encoder_right_count', 'wheel_left_rpm', 'wheel_right_rpm'
+];
+const CSV_MAX_ROWS = 100000; // 브라우저 메모리 과다 사용 방지 (100ms 전송 기준 약 2.8시간)
+let csvRecording = false;
+let csvRows = [];
+
+function csvCell(value) {
+  if (value === null || value === undefined || value === '') return '';
+  const s = String(value);
+  // CSV 수식 주입 방지: 자유 텍스트가 계산식처럼 해석되지 않게 처리합니다.
+  if (/^[=+@\t\r]/.test(s)) return `"'${s.replaceAll('"', '""')}"`;
+  return /[",\n\r]/.test(s) ? `"${s.replaceAll('"', '""')}"` : s;
+}
+function updateCsvUi() {
+  const b = $('btnRecord');
+  b.textContent = csvRecording ? '■ 기록 중지' : '● CSV 기록 시작';
+  b.classList.toggle('rec', csvRecording);
+  $('btnCsvSave').disabled = csvRows.length === 0;
+  $('btnCsvClear').disabled = csvRows.length === 0;
+  const status = csvRecording ? (rxChar ? '기록 중' : '기록 중 · BLE 연결 대기') : '기록 대기';
+  $('csvInfo').textContent = `${status} · ${csvRows.length.toLocaleString('ko-KR')}개 샘플`;
+  $('btnCsvSave').title = csvRows.length ? 'CSV 파일로 내려받기' : '먼저 기록 시작을 누르고 BLE 데이터를 1개 이상 수신하세요';
+}
+function recordCsvSample(f) {
+  if (!csvRecording) return;
+  if (csvRows.length >= CSV_MAX_ROWS) {
+    csvRecording = false;
+    updateCsvUi();
+    log('CSV 기록 상한(100,000개)에 도달해 기록을 중지했습니다. CSV 파일을 저장해 주세요.');
+    return;
+  }
+  const hasCounts = f.length >= 19 && [f[17], f[18]].every(
+    v => v.trim() !== '' && Number.isSafeInteger(Number(v))
+  );
+  const row = [
+    new Date().toISOString(), // PC에서 수신한 UTC 시간 (ms 정밀도)
+    /^\d+$/.test(f[1]) ? Number(f[1]) : '',
+    ['S', 'W', 'R'].includes(S.st) ? S.st : '',
+    S.bits.toString(16).padStart(2, '0').toUpperCase(),
+    S.pos, S.idx, S.ml, S.mr, S.cross ? 1 : 0,
+    ...S.raw,
+    S.speed ?? '', S.minPwm ?? '', S.thr,
+    connectedClients ?? '',
+    hasCounts ? Number(f[17]) : '', hasCounts ? Number(f[18]) : '',
+    hasCounts && rpmLeft !== null ? Number(rpmLeft.toFixed(2)) : '',
+    hasCounts && rpmRight !== null ? Number(rpmRight.toFixed(2)) : ''
+  ];
+  csvRows.push(row.map(csvCell).join(','));
+  if (csvRows.length % 10 === 0 || csvRows.length === 1) updateCsvUi();
+}
+function csvFileName() {
+  const d = new Date();
+  const pad = n => String(n).padStart(2, '0');
+  return `LF_S3_${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}_${pad(d.getHours())}-${pad(d.getMinutes())}-${pad(d.getSeconds())}.csv`;
+}
+function saveCsv() {
+  if (!csvRows.length) return;
+  const text = '\uFEFF' + CSV_COLUMNS.join(',') + '\r\n' + csvRows.join('\r\n') + '\r\n';
+  const url = URL.createObjectURL(new Blob([text], {type:'text/csv;charset=utf-8;'}));
+  const a = document.createElement('a');
+  a.href = url; a.download = csvFileName();
+  document.body.appendChild(a);
+  a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 3000);
+  log(`CSV 저장 요청: ${csvRows.length.toLocaleString('ko-KR')}개 샘플`);
+}
+$('btnRecord').addEventListener('click', () => {
+  csvRecording = !csvRecording;
+  updateCsvUi();
+  log(csvRecording ? 'CSV 기록 시작' : 'CSV 기록 중지');
+});
+$('btnCsvSave').addEventListener('click', saveCsv);
+$('btnCsvClear').addEventListener('click', () => {
+  if (!csvRows.length || !confirm('CSV로 저장하지 않은 기록도 삭제됩니다. 기록을 비우시겠습니까?')) return;
+  csvRows = [];
+  updateCsvUi();
+  log('CSV 기록 삭제');
+});
+updateCsvUi();
 
 // ───────── 수신 줄 처리 ─────────
 function handleLine(l) {
@@ -219,21 +478,30 @@ function handleLine(l) {
     S.mr    = parseInt(f[7], 10) || 0;
     S.cross = f[8] === '1';
     for (let i = 0; i < NUM; i++) S.raw[i] = parseInt(f[9 + i], 10) || 0;
+    updateEncoderFromData(f);
+    recordCsvSample(f);
     hist.push({ t: lastDataAt, pos: S.pos, idx: S.idx, cross: S.cross });
     while (hist.length && lastDataAt - hist[0].t > HIST_MS) hist.shift();
-    render();
+    scheduleRender();
   } else if (f[0] === 'S' && f.length >= 4) {
     S.speed = +f[1]; S.minPwm = +f[2]; S.thr = +f[3] || 1000;
     $('vSpeed').textContent = S.speed + '%';
     $('vMin').textContent = S.minPwm;
     $('vThr').textContent = S.thr;
-    drawSensors();
+    scheduleRender();
+  } else if (f[0] === 'C' && f.length === 2) {
+    // 로봇 펌웨어가 전송하는 실제 동시 BLE 연결 수: C,2\n
+    const n = Number(f[1]);
+    if (Number.isSafeInteger(n) && n >= 0) {
+      connectedClients = n;
+      updateClientCount();
+    }
   } else if (f[0] === 'E') {
     const ev = f.slice(1).join(',');
     if (ev === 'START') S.st = 'W';          // 버튼으로 눌러도 즉시 반영
     if (ev === 'STOP')  S.st = 'S';
     log('로봇: ' + ev);
-    render();
+    scheduleRender();
   } else if (l.length) {
     log(l);
   }
@@ -266,22 +534,28 @@ function setMotorCard(id, v) {
 
 // ───────── 화면 갱신 ─────────
 function render() {
-  const run = S.st === 'R';
-  $('vState').textContent = stateName[S.st] || '-';
-  $('vState').style.color = run ? 'var(--ok)' : S.st === 'W' ? 'var(--warn)' : 'var(--fg)';
+  const fresh = telemetryFresh();
+  const run = S.st === 'R' && fresh;
+  $('vState').textContent = S.st && !fresh ? '지연' : stateName[S.st] || '-';
+  $('vState').style.color = S.st && !fresh ? 'var(--bad)' : run ? 'var(--ok)' : S.st === 'W' ? 'var(--warn)' : 'var(--fg)';
 
   const b = $('btnRun');
   b.disabled = !rxChar || b.dataset.busy === '1';
+  document.querySelectorAll('button[data-cmd]').forEach(button => { button.disabled = !rxChar; });
   if (S.st === 'R' || S.st === 'W') { b.textContent = '■ 정지'; b.className = 'stop'; }
   else                              { b.textContent = '▶ 시작'; b.className = 'start'; }
 
   const d = direction();
-  $('dirText').textContent = (run ? '' : (S.st === 'W' ? '출발 대기 · ' : '정지 중 · 예상: ')) + d.txt;
-  $('dirText').className = run ? d.cls : '';
-  $('dirSub').textContent = `POS ${S.pos > 0 ? '+' : ''}${S.pos} · 레벨 ${S.idx >= 8 ? 'lost' : 'lv' + S.idx} · 센서 ${bitsStr(S.bits)}`;
+  if (!rxChar) $('dirText').textContent = '연결 대기';
+  else if (!S.st) $('dirText').textContent = '데이터 수신 대기';
+  else if (!fresh) $('dirText').textContent = '데이터 지연 · 마지막: ' + d.txt;
+  else $('dirText').textContent = (run ? '' : (S.st === 'W' ? '출발 대기 · ' : '정지 중 · 예상: ')) + d.txt;
+  $('dirText').className = !fresh && S.st ? 'bad' : run ? d.cls : '';
+  $('dirSub').textContent = S.st ? `POS ${S.pos > 0 ? '+' : ''}${S.pos} · 레벨 ${S.idx >= 8 ? 'lost' : 'lv' + S.idx} · 센서 ${bitsStr(S.bits)}` : '-';
 
   setMotorCard('ML', S.ml);
   setMotorCard('MR', S.mr);
+  updateRpmDisplay();
 
   // 센서 점, 라인 위치 표시
   dotEls.forEach((el, i) => el.classList.toggle('on', !!(S.bits & (1 << i))));
@@ -299,7 +573,7 @@ function render() {
   else {
     const ang = (S.ml - S.mr) / sum * 90;
     ar.style.transform = `rotate(${ang.toFixed(1)}deg)`;
-    ar.style.opacity = run ? 1 : 0.35;
+    ar.style.opacity = run ? 1 : fresh ? 0.35 : 0;
     ar.style.fill = ar.style.stroke = run ? cssVar(d.cls ? '--' + d.cls : '--acc') : cssVar('--mut');
   }
   $('robot').classList.toggle('idle', !run);
@@ -336,7 +610,7 @@ makeTread('treadL', 18); makeTread('treadR', 156);
 let offL = 0, offR = 0, lastT = performance.now();
 function animate(t) {
   const dt = Math.min(0.1, (t - lastT) / 1000); lastT = t;
-  if (S.st === 'R') {
+  if (S.st === 'R' && telemetryFresh()) {
     const k = 80 / 255;                       // PWM 255 → 초당 80 단위 이동 (표시용)
     offL = ((offL - S.ml * k * dt) % 8 + 8) % 8;
     offR = ((offR - S.mr * k * dt) % 8 + 8) % 8;
@@ -389,7 +663,9 @@ function drawSensors() {
 
 function drawPos() {
   const [ctx, W, H] = fit($('cvPos'));
-  const padL = 44, padR = 8, padT = 8, padB = 18;
+  // POS 눈금과 방향 텍스트를 동일 영역에 그리지 않습니다.
+  // 방향(음수=왼쪽/양수=오른쪽)은 하단 범례에 별도로 표시합니다.
+  const padL = 48, padR = 10, padT = 12, padB = 12;
   const pw = W - padL - padR, ph = H - padT - padB;
   const yOf = p => padT + (1 - (p + LOST_POS) / (LOST_POS * 2)) * ph;
   const now = performance.now();
@@ -403,21 +679,24 @@ function drawPos() {
     ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(W - padR, y); ctx.stroke();
     ctx.fillStyle = mut; ctx.fillText((p > 0 ? '+' : '') + p, padL - 6, y + 4);
   });
-  ctx.textAlign = 'left'; ctx.fillText('← 왼쪽', 2, padT + 10); ctx.fillText('→ 오른쪽', 2, H - 4);
-
-  if (hist.length < 2) return;
+  // 15초 밖으로 이동한 점이 캔버스 경계를 침범하지 않게 차트 부분만 그립니다.
+  const visible = hist.filter(h => h.t >= now - HIST_MS);
+  if (visible.length < 2) return;
+  ctx.save();
+  ctx.beginPath(); ctx.rect(padL, padT, pw, ph); ctx.clip();
   ctx.strokeStyle = cssVar('--acc'); ctx.lineWidth = 2; ctx.beginPath();
-  hist.forEach((h, i) => {
+  visible.forEach((h, i) => {
     const x = xOf(h.t), y = yOf(Math.max(-LOST_POS, Math.min(LOST_POS, h.pos)));
     i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
   });
   ctx.stroke();
-  hist.forEach(h => {
+  visible.forEach(h => {
     if (h.idx >= 8 || h.cross) {
       ctx.fillStyle = h.idx >= 8 ? cssVar('--bad') : cssVar('--warn');
       ctx.beginPath(); ctx.arc(xOf(h.t), yOf(Math.max(-LOST_POS, Math.min(LOST_POS, h.pos))), 3, 0, Math.PI * 2); ctx.fill();
     }
   });
+  ctx.restore();
 }
 window.addEventListener('resize', () => { drawSensors(); drawPos(); });
 
@@ -426,6 +705,7 @@ function setConn(txt, cls) { const c = $('chipConn'); c.textContent = txt; c.cla
 
 async function connectGatt() {
   setConn('연결 중...');
+  clearTelemetry();
   const server = await device.gatt.connect();
   const svc = await server.getPrimaryService(NUS);
   const tx = await svc.getCharacteristic(TX);
@@ -443,7 +723,10 @@ async function connectGatt() {
   });
   setConn('연결됨: ' + (device.name || '로봇'), 'on');
   $('btnConnect').textContent = '연결';
+  $('btnConnect').disabled = true; // 연결 상태에서 중복 연결 시도 방지
   $('btnDisconnect').disabled = false;
+  updateClientCount();
+  updateCsvUi();
   log('연결됨');
   send('s');
   render();
@@ -457,9 +740,11 @@ $('btnConnect').onclick = async () => {
     if (!device) {
       device = await navigator.bluetooth.requestDevice({ filters: [{ services: [NUS] }] });
       device.addEventListener('gattserverdisconnected', () => {
-        rxChar = null; buf = '';
+        rxChar = null;
+        clearTelemetry();
         setConn('연결 끊김', 'err');
         $('btnConnect').textContent = '다시 연결';
+        $('btnConnect').disabled = false;
         $('btnDisconnect').disabled = true;
         log('연결 끊김');
         render();
@@ -468,6 +753,10 @@ $('btnConnect').onclick = async () => {
     await connectGatt();
   } catch (err) {
     setConn('오류: ' + err.message, 'err');
+    rxChar = null;
+    $('btnConnect').disabled = false;
+    clearTelemetry();
+    if (device && device.gatt && device.gatt.connected) device.gatt.disconnect();
     if (err.name === 'NotFoundError') device = null;   // 선택 창에서 취소
   }
 };
@@ -488,19 +777,33 @@ $('btnRun').onclick = () => {
   setTimeout(() => { b.dataset.busy = '0'; render(); }, 400);   // 연타로 두 번 토글되는 것 방지
 };
 document.querySelectorAll('button[data-cmd]').forEach(b => b.onclick = () => send(b.dataset.cmd));
+$('encCpr').addEventListener('change', updateRpmSettings);
+$('gearRatio').addEventListener('change', updateRpmSettings);
+loadRpmSettings();
 
 // 수신률, 데이터 끊김 표시
 setInterval(() => {
   const c = $('chipRate');
-  c.textContent = lineCount + ' 줄/초';
-  c.className = 'chip num ' + (rxChar ? (lineCount >= 5 ? 'on' : 'err') : '');
+  if (!rxChar) {
+    c.textContent = '0 줄/초';
+    c.className = 'chip num';
+  } else if (!lastDataAt) {
+    c.textContent = '수신 대기';
+    c.className = 'chip num warn';
+  } else if (!telemetryFresh()) {
+    c.textContent = '수신 지연';
+    c.className = 'chip num err';
+  } else {
+    c.textContent = lineCount + ' 줄/초';
+    c.className = 'chip num ' + (lineCount >= 5 ? 'on' : 'warn');
+  }
   lineCount = 0;
-  drawPos();
+  render();
 }, 1000);
 
 // 오프라인 사용: https(GitHub Pages)에서 한 번 열면 이후 인터넷 없이도 열림
 if ('serviceWorker' in navigator && location.protocol === 'https:') {
-  navigator.serviceWorker.register('sw.js').catch(() => {});
+  navigator.serviceWorker.register('sw.js?v=6').catch(() => {});
 }
 
 render();
