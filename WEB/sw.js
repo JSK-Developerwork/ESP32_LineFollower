@@ -1,6 +1,6 @@
 // 라인팔로워 상황판 오프라인 캐시 (네트워크 우선, 실패 시 마지막 저장본)
 // 버전을 올려 이전 캐시가 새 index.html을 가리지 않도록 합니다.
-const CACHE = 'lf-dash-v6-csv-top-20261112';
+const CACHE = 'lf-dash-v7-sensor-view';
 const CACHE_PREFIX = 'lf-dash-';
 const FILES = ['./', './index.html'];
 
